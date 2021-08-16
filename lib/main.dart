@@ -12,13 +12,15 @@ late InMemorySignalProtocolStore _signalProtocolStore;
 class RetrevedKeys {
   final int remoteRegId;
   final IdentityKeyPair remoteIdentityKeyPair;
-  final List<PreKeyRecord> remotePreKeys;
+  final PreKeyRecord remotePreKey;
+  final int remotePreKeyId;
   final SignedPreKeyRecord remoteSignedPreKey;
 
   RetrevedKeys(
       {required this.remoteRegId,
       required this.remoteIdentityKeyPair,
-      required this.remotePreKeys,
+      required this.remotePreKey,
+      required this.remotePreKeyId,
       required this.remoteSignedPreKey});
 }
 
@@ -53,8 +55,8 @@ Future<void> install() async {
   final PreKeyBundle retrievedPreKey = PreKeyBundle(
       retrevedKeys.remoteRegId,
       1,
-      retrevedKeys.remotePreKeys[0].id,
-      retrevedKeys.remotePreKeys[0].getKeyPair().publicKey,
+      retrevedKeys.remotePreKeyId,
+      retrevedKeys.remotePreKey.getKeyPair().publicKey,
       retrevedKeys.remoteSignedPreKey.id,
       retrevedKeys.remoteSignedPreKey.getKeyPair().publicKey,
       retrevedKeys.remoteSignedPreKey.signature,
@@ -71,7 +73,7 @@ Future<void> install() async {
   final remoteSessionCipher =
       SessionCipher.fromStore(_signalProtocolStore, aliceAddress);
 
-  for (var p in retrevedKeys.remotePreKeys) {
+  for (var p in [retrevedKeys.remotePreKey]) {
     await _signalProtocolStore.storePreKey(p.id, p);
   }
 
@@ -94,7 +96,8 @@ Future<RetrevedKeys> fetchRemoteKeys() {
   return Future.value(RetrevedKeys(
     remoteRegId: remoteRegId,
     remoteIdentityKeyPair: remoteIdentityKeyPair,
-    remotePreKeys: remotePreKeys,
+    remotePreKey: remotePreKeys[0],
+    remotePreKeyId: remotePreKeys[0].id,
     remoteSignedPreKey: remoteSignedPreKey,
   ));
 }
