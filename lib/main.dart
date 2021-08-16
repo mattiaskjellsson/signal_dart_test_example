@@ -6,8 +6,15 @@ Future<void> main() async {
   await install();
 }
 
+// Stores stuff
+late InMemorySessionStore _sessionStore;
+late InMemoryPreKeyStore _preKeyStore;
+late InMemorySignedPreKeyStore _signedPreKeyStore;
+late InMemoryIdentityKeyStore _identityStore;
+
 late SessionCipher _sessionCipher;
 late InMemorySignalProtocolStore _signalProtocolStore;
+late final SessionBuilder _sessionBuilder;
 
 class RetrevedKeys {
   final int remoteRegId;
@@ -24,34 +31,56 @@ class RetrevedKeys {
       required this.remoteSignedPreKey});
 }
 
-Future<void> install() async {
+class MyKeys {
+  final IdentityKeyPair identityKeyPair;
+  final int registrationId;
+  final List<PreKeyRecord> preKeys;
+  final SignedPreKeyRecord signedPreKey;
+
+  MyKeys(
+      {required this.identityKeyPair,
+      required this.registrationId,
+      required this.preKeys,
+      required this.signedPreKey});
+}
+
+MyKeys generateMyKeys() {
   final IdentityKeyPair identityKeyPair = generateIdentityKeyPair();
   final int registrationId = generateRegistrationId(false);
-
   final List<PreKeyRecord> preKeys = generatePreKeys(0, 110);
-
   final SignedPreKeyRecord signedPreKey =
       generateSignedPreKey(identityKeyPair, 0);
 
-  final InMemorySessionStore sessionStore = InMemorySessionStore();
-  final InMemoryPreKeyStore preKeyStore = InMemoryPreKeyStore();
-  final InMemorySignedPreKeyStore signedPreKeyStore =
-      InMemorySignedPreKeyStore();
-  final InMemoryIdentityKeyStore identityStore =
-      InMemoryIdentityKeyStore(identityKeyPair, registrationId);
+  return MyKeys(
+      identityKeyPair: identityKeyPair,
+      registrationId: registrationId,
+      preKeys: preKeys,
+      signedPreKey: signedPreKey);
+}
 
-  for (var p in preKeys) {
-    await preKeyStore.storePreKey(p.id, p);
+Future<void> initStores(MyKeys myKeys) async {
+  _sessionStore = InMemorySessionStore();
+  _preKeyStore = InMemoryPreKeyStore();
+  _signedPreKeyStore = InMemorySignedPreKeyStore();
+  _identityStore =
+      InMemoryIdentityKeyStore(myKeys.identityKeyPair, myKeys.registrationId);
+
+  for (var p in myKeys.preKeys) {
+    await _preKeyStore.storePreKey(p.id, p);
   }
 
-  await signedPreKeyStore.storeSignedPreKey(signedPreKey.id, signedPreKey);
+  await _signedPreKeyStore.storeSignedPreKey(
+      myKeys.signedPreKey.id, myKeys.signedPreKey);
+}
+
+Future<void> install() async {
+  final myKeys = generateMyKeys();
+
+  await initStores(myKeys);
 
   final SignalProtocolAddress bobAddress = SignalProtocolAddress('bob', 1);
-  final SessionBuilder sessionBuilder = SessionBuilder(
-      sessionStore, preKeyStore, signedPreKeyStore, identityStore, bobAddress);
 
   final retrevedKeys = await fetchRemoteKeys();
-
   final PreKeyBundle retrievedPreKey = PreKeyBundle(
       retrevedKeys.remoteRegId,
       1,
@@ -62,10 +91,12 @@ Future<void> install() async {
       retrevedKeys.remoteSignedPreKey.signature,
       retrevedKeys.remoteIdentityKeyPair.getPublicKey());
 
-  await sessionBuilder.processPreKeyBundle(retrievedPreKey);
+  _sessionBuilder = SessionBuilder(_sessionStore, _preKeyStore,
+      _signedPreKeyStore, _identityStore, bobAddress);
+  await _sessionBuilder.processPreKeyBundle(retrievedPreKey);
 
-  _sessionCipher = SessionCipher(
-      sessionStore, preKeyStore, signedPreKeyStore, identityStore, bobAddress);
+  _sessionCipher = SessionCipher(_sessionStore, _preKeyStore,
+      _signedPreKeyStore, _identityStore, bobAddress);
 
   _signalProtocolStore =
       InMemorySignalProtocolStore(retrevedKeys.remoteIdentityKeyPair, 1);
@@ -81,8 +112,10 @@ Future<void> install() async {
       retrevedKeys.remoteSignedPreKey.id, retrevedKeys.remoteSignedPreKey);
 
   CiphertextMessage ciphertext = await encryptText('Hello Mixin🤣');
-
   await receiveEncrypted(ciphertext, remoteSessionCipher);
+
+  CiphertextMessage ciphertext2 = await encryptText('Hey hey hey');
+  await receiveEncrypted(ciphertext2, remoteSessionCipher);
 }
 
 Future<RetrevedKeys> fetchRemoteKeys() {
