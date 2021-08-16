@@ -7,66 +7,96 @@ Future<void> main() async {
 }
 
 late SessionCipher _sessionCipher;
+late InMemorySignalProtocolStore _signalProtocolStore;
+
+class RetrevedKeys {
+  final int remoteRegId;
+  final IdentityKeyPair remoteIdentityKeyPair;
+  final List<PreKeyRecord> remotePreKeys;
+  final SignedPreKeyRecord remoteSignedPreKey;
+
+  RetrevedKeys(
+      {required this.remoteRegId,
+      required this.remoteIdentityKeyPair,
+      required this.remotePreKeys,
+      required this.remoteSignedPreKey});
+}
 
 Future<void> install() async {
-  final identityKeyPair = generateIdentityKeyPair();
-  final registrationId = generateRegistrationId(false);
+  final IdentityKeyPair identityKeyPair = generateIdentityKeyPair();
+  final int registrationId = generateRegistrationId(false);
 
-  final preKeys = generatePreKeys(0, 110);
+  final List<PreKeyRecord> preKeys = generatePreKeys(0, 110);
 
-  final signedPreKey = generateSignedPreKey(identityKeyPair, 0);
+  final SignedPreKeyRecord signedPreKey =
+      generateSignedPreKey(identityKeyPair, 0);
 
-  final sessionStore = InMemorySessionStore();
-  final preKeyStore = InMemoryPreKeyStore();
-  final signedPreKeyStore = InMemorySignedPreKeyStore();
-  final identityStore =
+  final InMemorySessionStore sessionStore = InMemorySessionStore();
+  final InMemoryPreKeyStore preKeyStore = InMemoryPreKeyStore();
+  final InMemorySignedPreKeyStore signedPreKeyStore =
+      InMemorySignedPreKeyStore();
+  final InMemoryIdentityKeyStore identityStore =
       InMemoryIdentityKeyStore(identityKeyPair, registrationId);
 
   for (var p in preKeys) {
     await preKeyStore.storePreKey(p.id, p);
   }
+
   await signedPreKeyStore.storeSignedPreKey(signedPreKey.id, signedPreKey);
 
-  final bobAddress = SignalProtocolAddress('bob', 1);
-  final sessionBuilder = SessionBuilder(
+  final SignalProtocolAddress bobAddress = SignalProtocolAddress('bob', 1);
+  final SessionBuilder sessionBuilder = SessionBuilder(
       sessionStore, preKeyStore, signedPreKeyStore, identityStore, bobAddress);
 
-  // Should get remote from the server
-  final remoteRegId = generateRegistrationId(false);
-  final remoteIdentityKeyPair = generateIdentityKeyPair();
-  final remotePreKeys = generatePreKeys(0, 110);
-  final remoteSignedPreKey = generateSignedPreKey(remoteIdentityKeyPair, 0);
+  final retrevedKeys = await fetchRemoteKeys();
 
-  final retrievedPreKey = PreKeyBundle(
-      remoteRegId,
+  final PreKeyBundle retrievedPreKey = PreKeyBundle(
+      retrevedKeys.remoteRegId,
       1,
-      remotePreKeys[0].id,
-      remotePreKeys[0].getKeyPair().publicKey,
-      remoteSignedPreKey.id,
-      remoteSignedPreKey.getKeyPair().publicKey,
-      remoteSignedPreKey.signature,
-      remoteIdentityKeyPair.getPublicKey());
+      retrevedKeys.remotePreKeys[0].id,
+      retrevedKeys.remotePreKeys[0].getKeyPair().publicKey,
+      retrevedKeys.remoteSignedPreKey.id,
+      retrevedKeys.remoteSignedPreKey.getKeyPair().publicKey,
+      retrevedKeys.remoteSignedPreKey.signature,
+      retrevedKeys.remoteIdentityKeyPair.getPublicKey());
 
   await sessionBuilder.processPreKeyBundle(retrievedPreKey);
 
   _sessionCipher = SessionCipher(
       sessionStore, preKeyStore, signedPreKeyStore, identityStore, bobAddress);
 
-  final signalProtocolStore =
-      InMemorySignalProtocolStore(remoteIdentityKeyPair, 1);
+  _signalProtocolStore =
+      InMemorySignalProtocolStore(retrevedKeys.remoteIdentityKeyPair, 1);
   final aliceAddress = SignalProtocolAddress('alice', 1);
   final remoteSessionCipher =
-      SessionCipher.fromStore(signalProtocolStore, aliceAddress);
+      SessionCipher.fromStore(_signalProtocolStore, aliceAddress);
 
-  for (var p in remotePreKeys) {
-    await signalProtocolStore.storePreKey(p.id, p);
+  for (var p in retrevedKeys.remotePreKeys) {
+    await _signalProtocolStore.storePreKey(p.id, p);
   }
-  await signalProtocolStore.storeSignedPreKey(
-      remoteSignedPreKey.id, remoteSignedPreKey);
 
-  CiphertextMessage ciphertext = await newMethod('Hello Mixin🤣');
+  await _signalProtocolStore.storeSignedPreKey(
+      retrevedKeys.remoteSignedPreKey.id, retrevedKeys.remoteSignedPreKey);
+
+  CiphertextMessage ciphertext = await encryptText('Hello Mixin🤣');
 
   await receiveEncrypted(ciphertext, remoteSessionCipher);
+}
+
+Future<RetrevedKeys> fetchRemoteKeys() {
+  // Should get remote from the server
+  final int remoteRegId = generateRegistrationId(false);
+  final IdentityKeyPair remoteIdentityKeyPair = generateIdentityKeyPair();
+  final List<PreKeyRecord> remotePreKeys = generatePreKeys(0, 110);
+  final SignedPreKeyRecord remoteSignedPreKey =
+      generateSignedPreKey(remoteIdentityKeyPair, 0);
+
+  return Future.value(RetrevedKeys(
+    remoteRegId: remoteRegId,
+    remoteIdentityKeyPair: remoteIdentityKeyPair,
+    remotePreKeys: remotePreKeys,
+    remoteSignedPreKey: remoteSignedPreKey,
+  ));
 }
 
 Future<void> receiveEncrypted(
@@ -79,7 +109,7 @@ Future<void> receiveEncrypted(
   }
 }
 
-Future<CiphertextMessage> newMethod(String text) async {
+Future<CiphertextMessage> encryptText(String text) async {
   final ciphertext =
       await _sessionCipher.encrypt(Uint8List.fromList(utf8.encode(text)));
   print(ciphertext);
