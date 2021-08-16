@@ -14,7 +14,6 @@ This is trying to work out how [https://pub.dev/packages/libsignal_protocol_dart
 
 ``` bash
 $dart /lib/main.dart
-```
 
       .--..--..--..--..--..--.
     .' \  (`._   (_)     _   \
@@ -37,3 +36,4 @@ $dart /lib/main.dart
              ||       ||
     LGB      ||_.-.   ||_.-.
             (_.--__) (_.--__)
+```
