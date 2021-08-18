@@ -1,12 +1,11 @@
 import 'dart:convert';
-
-import 'package:signal_example_flutter/local_communication.dart';
 import 'dart:io';
 
+import 'local_back_and_forth.dart';
 import 'communication.dart';
 
 Future<void> main() async {
-  Communication stuff = LocalCommunication();
+  Communication stuff = LocalBackAndForth();
   NamesHolder holder = getNames();
   stuff.start(alice: holder.alicesName, bob: holder.bobsName);
 }

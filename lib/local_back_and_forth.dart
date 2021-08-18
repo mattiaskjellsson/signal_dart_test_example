@@ -5,7 +5,7 @@ import 'package:fixnum/fixnum.dart';
 
 import 'communication.dart';
 
-class LocalCommunication implements Communication {
+class LocalBackAndForth implements Communication {
   late final InMemorySignalProtocolStore _aliceStore;
   late final SessionCipher _bobSessionCipher;
 
