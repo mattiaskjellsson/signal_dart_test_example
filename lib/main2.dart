@@ -17,92 +17,170 @@ void createAliceStoreAndBuilder(SignalProtocolAddress receiverAddress) {
       SessionBuilder.fromSignalStore(_aliceStore, receiverAddress);
 }
 
-late final SessionBuilder _bobSessionBuilder;
 late final InMemorySignalProtocolStore _bobStore;
-void createBobStoreAndBuilder(SignalProtocolAddress receiverAddress) {}
+
+class BobKeys {
+  final ECKeyPair generatedKey;
+  final ECKeyPair preKeyPair;
+  final ECKeyPair signedPreKeyPair;
+  final int deviceId;
+  final int preKeyId;
+  final int signedPreKeyId;
+  final Uint8List signedPreKeySignature;
+
+  BobKeys({
+    required this.generatedKey,
+    required this.preKeyPair,
+    required this.signedPreKeyPair,
+    required this.deviceId,
+    required this.preKeyId,
+    required this.signedPreKeyId,
+    required this.signedPreKeySignature,
+  });
+}
+
+Future<BobKeys> createBobStore() async {
+  final ECKeyPair bobGeneratedKey = Curve.generateKeyPair();
+  final ECKeyPair bobPreKeyPair = Curve.generateKeyPair();
+  final ECKeyPair bobSignedPreKeyPair = Curve.generateKeyPair();
+  final int bobDeviceId = 1;
+  final int bobPreKeyId = 31337;
+  final int signedPreKeyId = 22;
+
+  _bobStore = InMemorySignalProtocolStore(
+      IdentityKeyPair(
+          IdentityKey(bobGeneratedKey.publicKey), bobGeneratedKey.privateKey),
+      generateRegistrationId(false));
+
+  final Uint8List bobSignedPreKeySignature = Curve.calculateSignature(
+      await _bobStore
+          .getIdentityKeyPair()
+          .then((value) => value.getPrivateKey()),
+      bobSignedPreKeyPair.publicKey.serialize());
+
+  return Future.value(BobKeys(
+    generatedKey: bobGeneratedKey,
+    preKeyPair: bobPreKeyPair,
+    signedPreKeyPair: bobSignedPreKeyPair,
+    deviceId: bobDeviceId,
+    preKeyId: bobPreKeyId,
+    signedPreKeyId: signedPreKeyId,
+    signedPreKeySignature: bobSignedPreKeySignature,
+  ));
+}
 
 Future<void> main() async {
   final aliAddress = SignalProtocolAddress('ali', 1);
   final bobAddress = SignalProtocolAddress('bob', 1);
 
   //////////////////////////////////////////////////////////////////////////////
+
   createAliceStoreAndBuilder(bobAddress);
-  createBobStoreAndBuilder(aliAddress);
 
-  final _bobGeneratedKey = Curve.generateKeyPair();
-  final _bobStore = InMemorySignalProtocolStore(
-      IdentityKeyPair(
-          IdentityKey(_bobGeneratedKey.publicKey), _bobGeneratedKey.privateKey),
-      generateRegistrationId(false));
+  //////////////////////////////////////////////////////////////////////////////
+  //Alice receive kind of this object... _KIND OF_
+  BobKeys bobKeys = await createBobStore();
 
-  var _bobPreKeyPair = Curve.generateKeyPair();
-  var _bobSignedPreKeyPair = Curve.generateKeyPair();
-  var _bobSignedPreKeySignature = Curve.calculateSignature(
-      await _bobStore
-          .getIdentityKeyPair()
-          .then((value) => value.getPrivateKey()),
-      _bobSignedPreKeyPair.publicKey.serialize());
-
-  final _bobDeviceId = 1;
-  final _bobPreKeyId = 31337;
-  final _signedPreKeyId = 22;
-
-  var _bobPreKey = PreKeyBundle(
+  //////////////////////////////////////////////////////////////////////////////
+  //Alice create a pre- key bundle
+  final bobPreKey = PreKeyBundle(
       await _bobStore.getLocalRegistrationId(),
-      _bobDeviceId,
-      _bobPreKeyId,
-      _bobPreKeyPair.publicKey,
-      _signedPreKeyId,
-      _bobSignedPreKeyPair.publicKey,
-      _bobSignedPreKeySignature,
+      bobKeys.deviceId,
+      bobKeys.preKeyId,
+      bobKeys.preKeyPair.publicKey,
+      bobKeys.signedPreKeyId,
+      bobKeys.signedPreKeyPair.publicKey,
+      bobKeys.signedPreKeySignature,
       await _bobStore
           .getIdentityKeyPair()
           .then((value) => value.getPublicKey()));
 
-  //////////////////////////////////////////////////////////////////////////////
+  //Start Alice session
+  await _aliceSessionBuilder.processPreKeyBundle(bobPreKey);
+  final aliceSessionCipher = SessionCipher.fromStore(_aliceStore, bobAddress);
 
-  await _aliceSessionBuilder.processPreKeyBundle(_bobPreKey);
+  ///////////////////////////////////////////////////////////////////////////////
+  // Alice send a message
+  final toServer =
+      await encryptMessage(aliceSessionCipher, 'Message from alice');
 
-  //////////////////////////////////////////////////////////////////////////////
+  ///////////////////////////////////////////////////////////////////////////////
 
-  var aliceSessionCipher = SessionCipher.fromStore(_aliceStore, bobAddress);
-  var outgoingMessage = await aliceSessionCipher
-      .encrypt(Uint8List.fromList(utf8.encode("Message from alice")));
-  var toServer = outgoingMessage.serialize();
-
-////////////////////////////////////////////////////////////////////////////////
-
-  var fromServer = toServer;
-
-////////////////////////////////////////////////////////////////////////////////
-
-  await _bobStore.storePreKey(
-      _bobPreKeyId, PreKeyRecord(_bobPreKey.getPreKeyId(), _bobPreKeyPair));
+  // Set keys in bob's store.
+  await _bobStore.storePreKey(bobKeys.preKeyId,
+      PreKeyRecord(bobPreKey.getPreKeyId(), bobKeys.preKeyPair));
 
   await _bobStore.storeSignedPreKey(
-      _signedPreKeyId,
+      bobKeys.signedPreKeyId,
       SignedPreKeyRecord(
-          _signedPreKeyId,
+          bobKeys.signedPreKeyId,
           Int64(DateTime.now().millisecondsSinceEpoch),
-          _bobSignedPreKeyPair,
-          _bobSignedPreKeySignature));
+          bobKeys.signedPreKeyPair,
+          bobKeys.signedPreKeySignature));
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Init bob's session cipher
 
   final bobSessionCipher = SessionCipher.fromStore(_bobStore, aliAddress);
 
   //////////////////////////////////////////////////////////////////////////////
 
+  //Bob decrypt first message from Alice. _This is special!_
+  final fromServer = toServer;
+
   final f = await bobSessionCipher.decrypt(PreKeySignalMessage(fromServer));
   print(utf8.decode(f));
 
   //////////////////////////////////////////////////////////////////////////////
-
+  //Bob send a message
   final bobOutgoingMessage =
-      await encryptMessage(bobSessionCipher, 'MessageFromBob');
+      await encryptMessage(bobSessionCipher, 'Message from bob');
 
+  // Alice receive message
   final alicePlaintext =
       await decryptMessage(aliceSessionCipher, bobOutgoingMessage);
 
   print(alicePlaintext);
+
+  //////////////////////////////////////////////////////////////////////////////
+  //Alice send message
+  final aliceOutgoing2 =
+      await encryptMessage(aliceSessionCipher, 'Second message from alice');
+
+  // Bob receive message
+  final alice2Plaintext =
+      await decryptMessage(bobSessionCipher, aliceOutgoing2);
+  print(alice2Plaintext);
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  // Bob send another message
+  final bobOutgoing2 =
+      await encryptMessage(bobSessionCipher, 'Second message from bob');
+
+  // Alice receive another message.
+  final bob2Plaintext = await decryptMessage(aliceSessionCipher, bobOutgoing2);
+  print(bob2Plaintext);
+
+  //////////////////////////////////////////////////////////////////////////////
+  //Alice send message
+  final aliceOutgoing3 =
+      await encryptMessage(aliceSessionCipher, 'Third message from alice');
+
+  // Bob receive message
+  final alice3Plaintext =
+      await decryptMessage(bobSessionCipher, aliceOutgoing3);
+  print(alice3Plaintext);
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  // Bob send another message
+  final bobOutgoing3 =
+      await encryptMessage(bobSessionCipher, 'Third message from bob');
+
+  // Alice receive another message.
+  final bob3Plaintext = await decryptMessage(aliceSessionCipher, bobOutgoing3);
+  print(bob3Plaintext);
 }
 
 Future<Uint8List> encryptMessage(SessionCipher cipher, String clearText) async {
