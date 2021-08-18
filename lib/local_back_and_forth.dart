@@ -4,10 +4,12 @@ import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 import 'package:fixnum/fixnum.dart';
 
 import 'communication.dart';
+import 'key_api.dart';
 
 class LocalBackAndForth implements Communication {
   late final InMemorySignalProtocolStore _aliceStore;
   late final SessionCipher _bobSessionCipher;
+  final KeyApi _keyApi = KeyApi();
 
   Future<void> start({required String alice, required String bob}) async {
     final aliAddress = SignalProtocolAddress(alice, 1);
@@ -100,14 +102,15 @@ class LocalBackAndForth implements Communication {
   Future<String> decryptMessage(
       {required SessionCipher cipher, required Uint8List fromServer}) async {
     try {
-      final f =
-          await _bobSessionCipher.decrypt(PreKeySignalMessage(fromServer));
-      return utf8.decode(f);
+      final encodedPlainText =
+          await cipher.decrypt(PreKeySignalMessage(fromServer));
+      return utf8.decode(encodedPlainText, allowMalformed: true);
     } on Exception {
       try {
-        final plainText = await cipher
+        final encodedPlainText = await cipher
             .decryptFromSignal(SignalMessage.fromSerialized(fromServer));
-        return utf8.decode(plainText, allowMalformed: true);
+
+        return utf8.decode(encodedPlainText, allowMalformed: true);
       } on Exception {
         throw Exception('Out of ideas');
       }
