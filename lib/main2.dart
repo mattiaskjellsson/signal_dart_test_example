@@ -4,16 +4,9 @@ import 'package:signal_example_flutter/signal_stuff.dart';
 import 'dart:io';
 
 Future<void> main() async {
-  SignalStuff stuff = SignalStuff();
-  NamesHolder h = getNames();
-  stuff.start(alice: h.alicesName, bob: h.bobsName);
-}
-
-class NamesHolder {
-  final String alicesName;
-  final String bobsName;
-
-  NamesHolder({required this.alicesName, required this.bobsName});
+  Communication stuff = SignalStuff();
+  NamesHolder holder = getNames();
+  stuff.start(alice: holder.alicesName, bob: holder.bobsName);
 }
 
 NamesHolder getNames() {
@@ -26,4 +19,11 @@ NamesHolder getNames() {
       stdin.readLineSync(encoding: encoding, retainNewlines: false) ?? 'NoName';
 
   return NamesHolder(alicesName: aliceName, bobsName: bobName);
+}
+
+class NamesHolder {
+  final String alicesName;
+  final String bobsName;
+
+  NamesHolder({required this.alicesName, required this.bobsName});
 }
