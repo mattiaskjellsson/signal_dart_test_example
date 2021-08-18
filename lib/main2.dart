@@ -19,7 +19,7 @@ void createAliceStoreAndBuilder(SignalProtocolAddress receiverAddress) {
 
 late final InMemorySignalProtocolStore _bobStore;
 
-class BobKeys {
+class LocalKeys {
   final ECKeyPair generatedKey;
   final ECKeyPair preKeyPair;
   final ECKeyPair signedPreKeyPair;
@@ -28,7 +28,7 @@ class BobKeys {
   final int signedPreKeyId;
   final Uint8List signedPreKeySignature;
 
-  BobKeys({
+  LocalKeys({
     required this.generatedKey,
     required this.preKeyPair,
     required this.signedPreKeyPair,
@@ -39,7 +39,48 @@ class BobKeys {
   });
 }
 
-Future<BobKeys> createBobStore() async {
+class RemoteKeys {
+  final ECPublicKey generatedPublicKey;
+  final ECPublicKey prePublicKey;
+  final ECPublicKey signedPublicPreKey;
+  final int deviceId;
+  final int preKeyId;
+  final int signedPreKeyId;
+  final Uint8List signedPreKeySignature;
+  final int registrationId;
+  final IdentityKey identityKey;
+
+  RemoteKeys({
+    required this.registrationId,
+    required this.generatedPublicKey,
+    required this.prePublicKey,
+    required this.signedPublicPreKey,
+    required this.deviceId,
+    required this.preKeyId,
+    required this.signedPreKeyId,
+    required this.signedPreKeySignature,
+    required this.identityKey,
+  });
+
+  factory RemoteKeys.fromLocalKeys(
+      {required LocalKeys localKeys,
+      required int registrationId,
+      required IdentityKey publicIdentityKey}) {
+    return RemoteKeys(
+      generatedPublicKey: localKeys.generatedKey.publicKey,
+      prePublicKey: localKeys.preKeyPair.publicKey,
+      signedPublicPreKey: localKeys.signedPreKeyPair.publicKey,
+      deviceId: localKeys.deviceId,
+      preKeyId: localKeys.preKeyId,
+      signedPreKeyId: localKeys.signedPreKeyId,
+      signedPreKeySignature: localKeys.signedPreKeySignature,
+      registrationId: registrationId,
+      identityKey: publicIdentityKey,
+    );
+  }
+}
+
+Future<PreKeyBundle> createBobStore() async {
   final ECKeyPair bobGeneratedKey = Curve.generateKeyPair();
   final ECKeyPair bobPreKeyPair = Curve.generateKeyPair();
   final ECKeyPair bobSignedPreKeyPair = Curve.generateKeyPair();
@@ -57,8 +98,8 @@ Future<BobKeys> createBobStore() async {
           .getIdentityKeyPair()
           .then((value) => value.getPrivateKey()),
       bobSignedPreKeyPair.publicKey.serialize());
-
-  return Future.value(BobKeys(
+////////////////////////////////
+  final bobKeys = LocalKeys(
     generatedKey: bobGeneratedKey,
     preKeyPair: bobPreKeyPair,
     signedPreKeyPair: bobSignedPreKeyPair,
@@ -66,46 +107,26 @@ Future<BobKeys> createBobStore() async {
     preKeyId: bobPreKeyId,
     signedPreKeyId: signedPreKeyId,
     signedPreKeySignature: bobSignedPreKeySignature,
-  ));
-}
+  );
 
-Future<void> main() async {
-  final aliAddress = SignalProtocolAddress('ali', 1);
-  final bobAddress = SignalProtocolAddress('bob', 1);
-
-  //////////////////////////////////////////////////////////////////////////////
-
-  createAliceStoreAndBuilder(bobAddress);
-
-  //////////////////////////////////////////////////////////////////////////////
-  //Alice receive kind of this object... _KIND OF_
-  BobKeys bobKeys = await createBobStore();
-
-  //////////////////////////////////////////////////////////////////////////////
-  //Alice create a pre- key bundle
-  final bobPreKey = PreKeyBundle(
-      await _bobStore.getLocalRegistrationId(),
-      bobKeys.deviceId,
-      bobKeys.preKeyId,
-      bobKeys.preKeyPair.publicKey,
-      bobKeys.signedPreKeyId,
-      bobKeys.signedPreKeyPair.publicKey,
-      bobKeys.signedPreKeySignature,
-      await _bobStore
+  RemoteKeys bobPublicKeys = RemoteKeys.fromLocalKeys(
+      localKeys: bobKeys,
+      registrationId: await _bobStore.getLocalRegistrationId(),
+      publicIdentityKey: await _bobStore
           .getIdentityKeyPair()
           .then((value) => value.getPublicKey()));
 
-  //Start Alice session
-  await _aliceSessionBuilder.processPreKeyBundle(bobPreKey);
-  final aliceSessionCipher = SessionCipher.fromStore(_aliceStore, bobAddress);
-
-  ///////////////////////////////////////////////////////////////////////////////
-  // Alice send a message
-  final toServer =
-      await encryptMessage(aliceSessionCipher, 'Message from alice');
-
-  ///////////////////////////////////////////////////////////////////////////////
-
+  final bobPreKey = PreKeyBundle(
+    bobPublicKeys.registrationId,
+    bobPublicKeys.deviceId,
+    bobPublicKeys.preKeyId,
+    bobPublicKeys.prePublicKey,
+    bobPublicKeys.signedPreKeyId,
+    bobPublicKeys.signedPublicPreKey,
+    bobPublicKeys.signedPreKeySignature,
+    bobPublicKeys.identityKey,
+  );
+////////////////////////////////////////////////////////////////
   // Set keys in bob's store.
   await _bobStore.storePreKey(bobKeys.preKeyId,
       PreKeyRecord(bobPreKey.getPreKeyId(), bobKeys.preKeyPair));
@@ -117,6 +138,29 @@ Future<void> main() async {
           Int64(DateTime.now().millisecondsSinceEpoch),
           bobKeys.signedPreKeyPair,
           bobKeys.signedPreKeySignature));
+////////////////////////////////////////////////////////////////
+  return Future.value(bobPreKey);
+}
+
+Future<void> main() async {
+  final aliAddress = SignalProtocolAddress('ali', 1);
+  final bobAddress = SignalProtocolAddress('bob', 1);
+
+  //////////////////////////////////////////////////////////////////////////////
+
+  createAliceStoreAndBuilder(bobAddress);
+
+  //////////////////////////////////////////////////////////////////////////////
+  //Alice receive kind of this stuff.
+  final bobPreKey = await createBobStore();
+
+  //Start Alice session
+  await _aliceSessionBuilder.processPreKeyBundle(bobPreKey);
+  final aliceSessionCipher = SessionCipher.fromStore(_aliceStore, bobAddress);
+
+  // Alice send a message
+  final toServer =
+      await encryptMessage(aliceSessionCipher, 'Message from alice');
 
   //////////////////////////////////////////////////////////////////////////////
   // Init bob's session cipher
