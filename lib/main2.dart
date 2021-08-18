@@ -19,67 +19,6 @@ void createAliceStoreAndBuilder(SignalProtocolAddress receiverAddress) {
 
 late final InMemorySignalProtocolStore _bobStore;
 
-class LocalKeys {
-  final ECKeyPair generatedKey;
-  final ECKeyPair preKeyPair;
-  final ECKeyPair signedPreKeyPair;
-  final int deviceId;
-  final int preKeyId;
-  final int signedPreKeyId;
-  final Uint8List signedPreKeySignature;
-
-  LocalKeys({
-    required this.generatedKey,
-    required this.preKeyPair,
-    required this.signedPreKeyPair,
-    required this.deviceId,
-    required this.preKeyId,
-    required this.signedPreKeyId,
-    required this.signedPreKeySignature,
-  });
-}
-
-class RemoteKeys {
-  final ECPublicKey generatedPublicKey;
-  final ECPublicKey prePublicKey;
-  final ECPublicKey signedPublicPreKey;
-  final int deviceId;
-  final int preKeyId;
-  final int signedPreKeyId;
-  final Uint8List signedPreKeySignature;
-  final int registrationId;
-  final IdentityKey identityKey;
-
-  RemoteKeys({
-    required this.registrationId,
-    required this.generatedPublicKey,
-    required this.prePublicKey,
-    required this.signedPublicPreKey,
-    required this.deviceId,
-    required this.preKeyId,
-    required this.signedPreKeyId,
-    required this.signedPreKeySignature,
-    required this.identityKey,
-  });
-
-  factory RemoteKeys.fromLocalKeys(
-      {required LocalKeys localKeys,
-      required int registrationId,
-      required IdentityKey publicIdentityKey}) {
-    return RemoteKeys(
-      generatedPublicKey: localKeys.generatedKey.publicKey,
-      prePublicKey: localKeys.preKeyPair.publicKey,
-      signedPublicPreKey: localKeys.signedPreKeyPair.publicKey,
-      deviceId: localKeys.deviceId,
-      preKeyId: localKeys.preKeyId,
-      signedPreKeyId: localKeys.signedPreKeyId,
-      signedPreKeySignature: localKeys.signedPreKeySignature,
-      registrationId: registrationId,
-      identityKey: publicIdentityKey,
-    );
-  }
-}
-
 Future<PreKeyBundle> createBobStore() async {
   final ECKeyPair bobGeneratedKey = Curve.generateKeyPair();
   final ECKeyPair bobPreKeyPair = Curve.generateKeyPair();
@@ -98,47 +37,30 @@ Future<PreKeyBundle> createBobStore() async {
           .getIdentityKeyPair()
           .then((value) => value.getPrivateKey()),
       bobSignedPreKeyPair.publicKey.serialize());
-////////////////////////////////
-  final bobKeys = LocalKeys(
-    generatedKey: bobGeneratedKey,
-    preKeyPair: bobPreKeyPair,
-    signedPreKeyPair: bobSignedPreKeyPair,
-    deviceId: bobDeviceId,
-    preKeyId: bobPreKeyId,
-    signedPreKeyId: signedPreKeyId,
-    signedPreKeySignature: bobSignedPreKeySignature,
-  );
-
-  RemoteKeys bobPublicKeys = RemoteKeys.fromLocalKeys(
-      localKeys: bobKeys,
-      registrationId: await _bobStore.getLocalRegistrationId(),
-      publicIdentityKey: await _bobStore
-          .getIdentityKeyPair()
-          .then((value) => value.getPublicKey()));
 
   final bobPreKey = PreKeyBundle(
-    bobPublicKeys.registrationId,
-    bobPublicKeys.deviceId,
-    bobPublicKeys.preKeyId,
-    bobPublicKeys.prePublicKey,
-    bobPublicKeys.signedPreKeyId,
-    bobPublicKeys.signedPublicPreKey,
-    bobPublicKeys.signedPreKeySignature,
-    bobPublicKeys.identityKey,
+    await _bobStore.getLocalRegistrationId(),
+    bobDeviceId,
+    bobPreKeyId,
+    bobPreKeyPair.publicKey,
+    signedPreKeyId,
+    bobSignedPreKeyPair.publicKey,
+    bobSignedPreKeySignature,
+    await _bobStore.getIdentityKeyPair().then((value) => value.getPublicKey()),
   );
-////////////////////////////////////////////////////////////////
+
   // Set keys in bob's store.
-  await _bobStore.storePreKey(bobKeys.preKeyId,
-      PreKeyRecord(bobPreKey.getPreKeyId(), bobKeys.preKeyPair));
+  await _bobStore.storePreKey(
+      bobPreKeyId, PreKeyRecord(bobPreKey.getPreKeyId(), bobPreKeyPair));
 
   await _bobStore.storeSignedPreKey(
-      bobKeys.signedPreKeyId,
+      signedPreKeyId,
       SignedPreKeyRecord(
-          bobKeys.signedPreKeyId,
+          signedPreKeyId,
           Int64(DateTime.now().millisecondsSinceEpoch),
-          bobKeys.signedPreKeyPair,
-          bobKeys.signedPreKeySignature));
-////////////////////////////////////////////////////////////////
+          bobSignedPreKeyPair,
+          bobSignedPreKeySignature));
+
   return Future.value(bobPreKey);
 }
 
