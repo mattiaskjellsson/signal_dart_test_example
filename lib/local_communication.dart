@@ -3,16 +3,9 @@ import 'dart:typed_data';
 import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 import 'package:fixnum/fixnum.dart';
 
-abstract class Communication {
-  Future<void> start({required String alice, required String bob});
-  Future<void> createAliceStoreAndBuilder(
-      {required SignalProtocolAddress receiverAddress,
-      required PreKeyBundle preKey});
-  Future<PreKeyBundle> createBobStore(
-      {required SignalProtocolAddress aliAddress});
-}
+import 'communication.dart';
 
-class SignalStuff implements Communication {
+class LocalCommunication implements Communication {
   late final InMemorySignalProtocolStore _aliceStore;
   late final SessionCipher _bobSessionCipher;
 
@@ -97,7 +90,7 @@ class SignalStuff implements Communication {
   }
 
   Future<Uint8List> encryptMessage(
-      SessionCipher cipher, String clearText) async {
+      {required SessionCipher cipher, required String clearText}) async {
     final CiphertextMessage encryptedMessage =
         await cipher.encrypt(Uint8List.fromList(utf8.encode(clearText)));
     return encryptedMessage.serialize();
@@ -105,7 +98,7 @@ class SignalStuff implements Communication {
 
   // TODO: UGLY UGLY UGLY! Never do like this! But for the sake of simplicity.
   Future<String> decryptMessage(
-      SessionCipher cipher, Uint8List fromServer) async {
+      {required SessionCipher cipher, required Uint8List fromServer}) async {
     try {
       final f =
           await _bobSessionCipher.decrypt(PreKeySignalMessage(fromServer));
@@ -124,86 +117,87 @@ class SignalStuff implements Communication {
   Future<void> sendMessages(SessionCipher aliceSessionCipher, String alice,
       SessionCipher bobSessionCipher, String bob) async {
     // Alice send first message
-    final Uint8List aliceOutgoing0 =
-        await encryptMessage(aliceSessionCipher, 'Message from $alice');
+    final Uint8List aliceOutgoing0 = await encryptMessage(
+        cipher: aliceSessionCipher, clearText: 'Message from $alice');
 
-    final f = await decryptMessage(_bobSessionCipher, aliceOutgoing0);
+    final f = await decryptMessage(
+        cipher: _bobSessionCipher, fromServer: aliceOutgoing0);
     print(f);
 
     //Bob send a message
-    final bobOutgoingMessage =
-        await encryptMessage(bobSessionCipher, 'Message from $bob');
+    final bobOutgoingMessage = await encryptMessage(
+        cipher: bobSessionCipher, clearText: 'Message from $bob');
 
     // Alice receive message
-    final alicePlaintext =
-        await decryptMessage(aliceSessionCipher, bobOutgoingMessage);
+    final alicePlaintext = await decryptMessage(
+        cipher: aliceSessionCipher, fromServer: bobOutgoingMessage);
 
     print(alicePlaintext);
 
     //////////////////////////////////////////////////////////////////////////////
 
     //Alice send message
-    final aliceOutgoing2 =
-        await encryptMessage(aliceSessionCipher, 'Second message from $alice');
+    final aliceOutgoing2 = await encryptMessage(
+        cipher: aliceSessionCipher, clearText: 'Second message from $alice');
 
     // Bob receive message
-    final alice2Plaintext =
-        await decryptMessage(bobSessionCipher, aliceOutgoing2);
+    final alice2Plaintext = await decryptMessage(
+        cipher: bobSessionCipher, fromServer: aliceOutgoing2);
     print(alice2Plaintext);
 
     //////////////////////////////////////////////////////////////////////////////
 
     // Bob send another message
-    final bobOutgoing2 =
-        await encryptMessage(bobSessionCipher, 'Second message from $bob');
+    final bobOutgoing2 = await encryptMessage(
+        cipher: bobSessionCipher, clearText: 'Second message from $bob');
 
     // Alice receive another message.
-    final bob2Plaintext =
-        await decryptMessage(aliceSessionCipher, bobOutgoing2);
+    final bob2Plaintext = await decryptMessage(
+        cipher: aliceSessionCipher, fromServer: bobOutgoing2);
     print(bob2Plaintext);
 
     //////////////////////////////////////////////////////////////////////////////
 
     //Alice send message
-    final aliceOutgoing3 =
-        await encryptMessage(aliceSessionCipher, 'Third message from $alice');
+    final aliceOutgoing3 = await encryptMessage(
+        cipher: aliceSessionCipher, clearText: 'Third message from $alice');
 
     // Bob receive message
-    final alice3Plaintext =
-        await decryptMessage(bobSessionCipher, aliceOutgoing3);
+    final alice3Plaintext = await decryptMessage(
+        cipher: bobSessionCipher, fromServer: aliceOutgoing3);
     print(alice3Plaintext);
 
     //////////////////////////////////////////////////////////////////////////////
 
     // Bob send another message
-    final bobOutgoing3 =
-        await encryptMessage(bobSessionCipher, 'Third message from $bob');
+    final bobOutgoing3 = await encryptMessage(
+        cipher: bobSessionCipher, clearText: 'Third message from $bob');
 
     // Alice receive another message.
-    final bob3Plaintext =
-        await decryptMessage(aliceSessionCipher, bobOutgoing3);
+    final bob3Plaintext = await decryptMessage(
+        cipher: aliceSessionCipher, fromServer: bobOutgoing3);
     print(bob3Plaintext);
 
     //////////////////////////////////////////////////////////////////////////////
 
     // Bob send another message
-    final bobOutgoing4 =
-        await encryptMessage(bobSessionCipher, 'Fourth message from $bob');
+    final bobOutgoing4 = await encryptMessage(
+        cipher: bobSessionCipher, clearText: 'Fourth message from $bob');
 
     // Alice receive another message.
-    final bob4Plaintext =
-        await decryptMessage(aliceSessionCipher, bobOutgoing4);
+    final bob4Plaintext = await decryptMessage(
+        cipher: aliceSessionCipher, fromServer: bobOutgoing4);
     print(bob4Plaintext);
 
     //////////////////////////////////////////////////////////////////////////////
 
     // Bob send another message
-    final bobOutgoing5 =
-        await encryptMessage(bobSessionCipher, 'Fifth message from $bob');
+    final bobOutgoing5 = await encryptMessage(
+        cipher: bobSessionCipher, clearText: 'Fifth message from $bob');
 
     // Alice receive another message.
-    final bob5Plaintext =
-        await decryptMessage(aliceSessionCipher, bobOutgoing5);
+    final bob5Plaintext = await decryptMessage(
+        cipher: aliceSessionCipher, fromServer: bobOutgoing5);
     print(bob5Plaintext);
   }
 }

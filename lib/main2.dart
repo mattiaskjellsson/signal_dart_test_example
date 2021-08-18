@@ -1,10 +1,12 @@
 import 'dart:convert';
 
-import 'package:signal_example_flutter/signal_stuff.dart';
+import 'package:signal_example_flutter/local_communication.dart';
 import 'dart:io';
 
+import 'communication.dart';
+
 Future<void> main() async {
-  Communication stuff = SignalStuff();
+  Communication stuff = LocalCommunication();
   NamesHolder holder = getNames();
   stuff.start(alice: holder.alicesName, bob: holder.bobsName);
 }
