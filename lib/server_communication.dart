@@ -8,7 +8,7 @@ import 'communication.dart';
 import 'key_api.dart';
 
 class ServerConnection implements Communication {
-  late final KeyApi _keyApi = KeyApi();
+  late final KeyApi _keyApi = KeyApi(serverUrl: 'http://localhost:3000/');
   late final SessionCipher sessionCipher;
 
   @override

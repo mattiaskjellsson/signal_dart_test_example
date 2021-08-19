@@ -9,7 +9,7 @@ import 'key_api.dart';
 class LocalBackAndForth implements Communication {
   late final InMemorySignalProtocolStore _aliceStore;
   late final SessionCipher _bobSessionCipher;
-  final KeyApi _keyApi = KeyApi();
+  final KeyApi _keyApi = KeyApi(serverUrl: 'http://localhost:3000/');
 
   Future<void> start({required String alice, required String bob}) async {
     final aliAddress = SignalProtocolAddress(alice, 1);

@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class KeyApi {
-  static const SERVER_URL = 'http://localhost:3000/';
+  final String serverUrl;
+
+  KeyApi({required this.serverUrl});
 
   Future<KeyObject> fetchKey(String name) async {
-    final response = await http.get(Uri.parse(SERVER_URL + name));
+    final response = await http.get(Uri.parse(serverUrl + name));
 
     if (response.statusCode == 200 && response.body.isNotEmpty) {
       return KeyObject.fromJson(jsonDecode(response.body));
@@ -17,7 +19,7 @@ class KeyApi {
   Future<void> storeKey(KeyObject ko) async {
     final send = jsonEncode(ko.toJson());
     final send2 = '{"keys":' + send + '}';
-    final response = await http.post(Uri.parse(SERVER_URL + ko.username),
+    final response = await http.post(Uri.parse(serverUrl + ko.username),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
