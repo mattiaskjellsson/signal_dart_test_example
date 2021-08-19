@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class KeyApi {
@@ -10,9 +11,19 @@ class KeyApi {
     final response = await http.get(Uri.parse(serverUrl + name));
 
     if (response.statusCode == 200 && response.body.isNotEmpty) {
-      return KeyObject.fromJson(jsonDecode(response.body));
+      final o = KeyObject.fromJson(jsonDecode(response.body));
+      print('$name\'s deveicId ${o.deviceId}');
+      print('$name\'s identityKeyPair ${o.identityKeyPair}');
+      print('$name\'s preKey ${o.preKey}');
+      print('$name\'s preKeyId ${o.preKeyId}');
+      print('$name\'s registrationId ${o.registrationId}');
+      print('$name\'s signedPreKey ${o.signedPreKey}');
+      print('$name\'s signedPreKey ${o.signedPreKeyId}');
+      print('$name\'s username ${o.username}');
+      // print('$name\'s timestamp ${o.timestamp}');
+      return o;
     } else {
-      throw Exception('Failed to load Key');
+      throw Exception('Failed to fetch $name\'s Key');
     }
   }
 
@@ -35,13 +46,13 @@ class KeyApi {
 
 class KeyObject {
   final String username;
-  final String identityKeyPair;
-  final String deviceId;
-  final String preKeyId;
-  final String preKey;
-  final String signedPreKeyId;
-  final String signedPreKey;
-  final String registrationId;
+  final Uint8List identityKeyPair;
+  final int deviceId;
+  final int preKeyId;
+  final Uint8List preKey;
+  final int signedPreKeyId;
+  final Uint8List signedPreKey;
+  final int registrationId;
 
   KeyObject({
     required this.username,
@@ -54,16 +65,25 @@ class KeyObject {
     required this.registrationId,
   });
 
-  factory KeyObject.fromJson(Map<String, dynamic> json) {
+  factory KeyObject.fromJson(Map<String, dynamic> data) {
+    final f = json.decode(data['identityKeyPair']).cast<int>();
+    Uint8List identityKeyPair = Uint8List.fromList(f);
+
+    final g = json.decode(data['preKey']).cast<int>();
+    Uint8List preKey = Uint8List.fromList(g);
+
+    final h = json.decode(data['signedPreKey']).cast<int>();
+    Uint8List signedPreKey = Uint8List.fromList(h);
+
     return KeyObject(
-      username: json['username'],
-      identityKeyPair: json['identityKeyPair'],
-      deviceId: json['deviceId'],
-      preKeyId: json['preKeyId'],
-      preKey: json['preKey'],
-      signedPreKeyId: json['signedPreKeyId'],
-      signedPreKey: json['signedPreKey'],
-      registrationId: json['registrationId'],
+      username: data['username'],
+      identityKeyPair: identityKeyPair,
+      deviceId: int.parse(data['deviceId']),
+      preKeyId: int.parse(data['preKeyId']),
+      preKey: preKey,
+      signedPreKeyId: int.parse(data['signedPreKeyId']),
+      signedPreKey: signedPreKey,
+      registrationId: int.parse(data['registrationId']),
     );
   }
 

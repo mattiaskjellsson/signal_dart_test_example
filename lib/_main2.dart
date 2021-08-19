@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'local_back_and_forth.dart';
 import 'communication.dart';
+import 'names_holder.dart';
 
 Future<void> main() async {
   Communication stuff = LocalBackAndForth();
@@ -20,11 +21,4 @@ NamesHolder getNames() {
       stdin.readLineSync(encoding: encoding, retainNewlines: false) ?? 'NoName';
 
   return NamesHolder(alicesName: aliceName, bobsName: bobName);
-}
-
-class NamesHolder {
-  final String alicesName;
-  final String bobsName;
-
-  NamesHolder({required this.alicesName, required this.bobsName});
 }
