@@ -16,20 +16,24 @@ class ServerConnection implements Communication {
   late final InMemorySignalProtocolStore _store;
   late final SessionBuilder _sessionBuilder;
   late final Socket socket;
+  late final Int64 _timestamp;
+
   ServerConnection() : _keyApi = KeyApi(serverUrl: 'http://localhost:3000/');
 
   Future<PreKeyBundle> generateKeysSetupStore(
       {required SignalProtocolAddress receiverAddress}) async {
-    final myName = receiverAddress.getName() == 'bob' ? 'alice' : 'bob';
-    PersistedKeys pks = KeyPersistance.readKeys(myName);
+    PersistedKeys pks = KeyPersistance.readKeys(receiverAddress.getName());
+    _timestamp = pks.timestamp;
 
     // Create store
-    _store = InMemorySignalProtocolStore(
-        IdentityKeyPair(IdentityKey(pks.generatedKey.publicKey),
-            pks.generatedKey.privateKey),
-        pks.registrationId);
+    final publicList = pks.generatedKey.publicKey.serialize().toList();
+    final privateList = pks.generatedKey.privateKey.serialize().toList();
 
-    // Create the final key.
+    final keyPair = IdentityKeyPair(
+        IdentityKey.fromBytes(Uint8List.fromList(publicList), 0),
+        Curve.decodePrivatePoint(Uint8List.fromList(privateList)));
+    _store = InMemorySignalProtocolStore(keyPair, pks.registrationId);
+
     final signedPreKeySignature = Curve.calculateSignature(
         await _store
             .getIdentityKeyPair()
@@ -53,8 +57,8 @@ class ServerConnection implements Communication {
         pks.preKeyId, PreKeyRecord(preKey.getPreKeyId(), pks.preKeyPair));
     await _store.storeSignedPreKey(
         pks.signedPreKeyId,
-        SignedPreKeyRecord(pks.signedPreKeyId, pks.timestamp,
-            pks.signedPreKeyPair, signedPreKeySignature));
+        SignedPreKeyRecord(pks.signedPreKeyId, _timestamp, pks.signedPreKeyPair,
+            signedPreKeySignature));
 
     // Init session cipher
     _sessionCipher = SessionCipher.fromStore(_store, receiverAddress);
@@ -112,6 +116,8 @@ class ServerConnection implements Communication {
       signedPreKeyId: alicePreKeyBundle.getSignedPreKeyId(),
       signedPreKey: alicePreKeyBundle.getSignedPreKey()!.serialize(),
       registrationId: alicePreKeyBundle.getRegistrationId(),
+      timestamp: _timestamp,
+      signedPreKeySignature: alicePreKeyBundle.getSignedPreKeySignature(),
     ));
 
     final bobsKeys = await _keyApi.fetchKey(bob);

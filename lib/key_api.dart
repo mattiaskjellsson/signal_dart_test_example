@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:fixnum/fixnum.dart';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
@@ -20,7 +21,8 @@ class KeyApi {
       print('$name\'s signedPreKey ${o.signedPreKey}');
       print('$name\'s signedPreKey ${o.signedPreKeyId}');
       print('$name\'s username ${o.username}');
-      // print('$name\'s timestamp ${o.timestamp}');
+      print('$name\'s timestamp ${o.timestamp}');
+      print('$name\'s signedPreKeySignature ${o.signedPreKeySignature}');
       return o;
     } else {
       throw Exception('Failed to fetch $name\'s Key');
@@ -53,6 +55,8 @@ class KeyObject {
   final int signedPreKeyId;
   final Uint8List signedPreKey;
   final int registrationId;
+  final Int64 timestamp;
+  final Uint8List? signedPreKeySignature;
 
   KeyObject({
     required this.username,
@@ -63,6 +67,8 @@ class KeyObject {
     required this.signedPreKeyId,
     required this.signedPreKey,
     required this.registrationId,
+    required this.timestamp,
+    required this.signedPreKeySignature,
   });
 
   factory KeyObject.fromJson(Map<String, dynamic> data) {
@@ -84,6 +90,9 @@ class KeyObject {
       signedPreKeyId: int.parse(data['signedPreKeyId']),
       signedPreKey: signedPreKey,
       registrationId: int.parse(data['registrationId']),
+      timestamp: Int64.parseInt(data['timestamp']),
+      signedPreKeySignature: Uint8List.fromList(
+          json.decode(data['signedPreKeySignature']).cast<int>()),
     );
   }
 
@@ -97,6 +106,8 @@ class KeyObject {
       'signedPreKeyId': signedPreKeyId.toString(),
       'signedPreKey': signedPreKey.toString(),
       'registrationId': registrationId.toString(),
+      'timestamp': timestamp.toString(),
+      'signedPreKeySignature': signedPreKeySignature.toString(),
     };
   }
 }
