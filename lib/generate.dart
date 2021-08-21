@@ -27,6 +27,8 @@ void main() async {
   print('"deviceId": ${deviceId.toString()},');
   print('"preKeyId": ${preKeyId.toString()},');
   print('"signedPreKeyId": ${signedPreKeyId.toString()}');
+
+  // TODO: Investigate if this is really needed :thinking_face:
   print('"timestamp": ${Int64(DateTime.now().millisecondsSinceEpoch)}');
   print('}');
 }

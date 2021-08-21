@@ -5,7 +5,6 @@ import 'key_object.dart';
 
 class KeyApi {
   final String serverUrl;
-
   KeyApi({required this.serverUrl});
 
   Future<KeyObject> fetchKey(String name) async {

@@ -1,26 +1,35 @@
 import 'dart:convert';
 import 'dart:io';
-
-import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 import 'dart:typed_data';
+
 import 'package:fixnum/fixnum.dart';
+import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
+import 'package:signal_example_flutter/helpers/std_io.dart';
 import 'package:socket_io_client/socket_io_client.dart';
 
+import 'package:signal_example_flutter/socketIo/socket_client.dart';
+
+import '../helpers/key_object_key_bundle.dart';
+import '../key_persistance/key_persistance.dart';
+import '../key_persistance/persisted_keys.dart';
+import '../key_server/key_api.dart';
 import 'communication.dart';
-import 'key_server/key_api.dart';
-import 'key_server/key_object.dart';
-import 'persisted_keys.dart';
-import './helpers/key_object_key_bundle.dart';
 
 class ServerConnection implements Communication {
   late final KeyApi _keyApi;
   late final SessionCipher _sessionCipher;
   late final InMemorySignalProtocolStore _store;
   late final SessionBuilder _sessionBuilder;
-  late final Socket _socket;
   late final Int64 _timestamp;
+  late final Socket _socket;
+  late final SocketClient _socketIoClient;
 
-  ServerConnection({required KeyApi keyApi}) : _keyApi = keyApi;
+  ServerConnection({required KeyApi keyApi, required Socket socket})
+      : _keyApi = keyApi,
+        _socket = socket {
+    _socketIoClient =
+        SocketClient(receiveHandler: _receiveHandler, socket: _socket);
+  }
 
   Future<PreKeyBundle> loadKeysAndSetupStore(
       {required SignalProtocolAddress receiverAddress}) async {
@@ -122,54 +131,38 @@ class ServerConnection implements Communication {
           keyObject: await _keyApi.fetchKey(bob)),
     );
 
-    connectToServer();
+    _socketIoClient.connect();
 
     await _messageLoop();
   }
 
   Future<void> _messageLoop() async {
+    final stdIoHelper = StdIoHelper();
+
     String send = '';
     final Encoding encoding = Encoding.getByName('utf-8') ?? Utf8Codec();
     while (send != '!exit') {
+      send = await stdIoHelper.readStdinLine();
       send = stdin.readLineSync(encoding: encoding, retainNewlines: false) ??
           '!exit';
 
-      final m = {
-        "id": _socket.id,
-        "timestamp": DateTime.now().millisecondsSinceEpoch,
-        'message':
-            (await encryptMessage(cipher: _sessionCipher, clearText: send))
-                .toList()
-                .toString(),
-      };
-
-      _socket.emit('send_message', json.encode(m));
+      if (send.isNotEmpty) {
+        _socketIoClient.sendMessage(
+            text:
+                (await encryptMessage(cipher: _sessionCipher, clearText: send))
+                    .toList()
+                    .toString());
+      }
     }
   }
 
-  void connectToServer() {
-    try {
-      _socket = io('http://localhost:3002/', <String, dynamic>{
-        'transports': ['websocket'],
-        'autoConnect': false,
-      });
-
-      _socket.on('connect', (_) => {print('connect: ${_socket.id}')});
-      _socket.on('message', _receiveHandler);
-      _socket.on('disconnect', (_) => print('disconnect'));
-      _socket.on('fromServer', (_) => print(_));
-      _socket.connect();
-    } catch (e) {
-      print('Ops, something happened :(');
-      print(e.toString());
-    }
-  }
-
-  _receiveHandler(dynamic data) {
+  void _receiveHandler(dynamic data) async {
     Map<String, dynamic> d = json.decode(data);
     if (d['id'] != _socket.id) {
-      final string =
-          decryptMessage(cipher: _sessionCipher, fromServer: d['message']);
+      final string = await decryptMessage(
+          cipher: _sessionCipher,
+          fromServer:
+              Uint8List.fromList(json.decode(d['message']).cast<int>()));
       print('$d::=> $string');
     }
   }

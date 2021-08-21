@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:signal_example_flutter/persisted_keys.dart';
+import 'package:signal_example_flutter/key_persistance/key_persistance.dart';
+import 'package:signal_example_flutter/key_persistance/persisted_keys.dart';
 
 void main() {
   // Alice persisted keys... just to have something to test with.

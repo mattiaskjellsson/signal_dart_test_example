@@ -15,11 +15,9 @@ dependencies:
   libsignal_protocol_dart:
     path: packages/libsignal_protocol_dart
   socket_io_client: ^2.0.0-beta.2
-  adhara_socket_io: ^1.0.1+1
+  # adhara_socket_io: ^1.0.1+1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-flutter:
-  uses-material-design: true
