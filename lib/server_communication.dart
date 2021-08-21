@@ -16,7 +16,7 @@ class ServerConnection implements Communication {
   late final SessionCipher _sessionCipher;
   late final InMemorySignalProtocolStore _store;
   late final SessionBuilder _sessionBuilder;
-  late final Socket socket;
+  late final Socket _socket;
   late final Int64 _timestamp;
 
   ServerConnection({required KeyApi keyApi}) : _keyApi = keyApi;
@@ -78,17 +78,6 @@ class ServerConnection implements Communication {
       required PreKeyBundle preKey}) async {
     _sessionBuilder = SessionBuilder.fromSignalStore(_store, receiverAddress);
 
-    // Init session cipher
-    //
-    print(
-        'Verify SignedPreKey:             ${preKey.getSignedPreKey()!.serialize()}');
-    print(
-        'Verify Identity Key:             ${preKey.getIdentityKey().publicKey.serialize()}');
-    print(
-        'Verify Signed Pre Key Signature: ${preKey.getSignedPreKeySignature()}');
-    print(
-        'Verify signature: ${Curve.verifySignature(preKey.getIdentityKey().publicKey, preKey.getSignedPreKey()!.serialize(), preKey.getSignedPreKeySignature())}');
-    //
     await _sessionBuilder.processPreKeyBundle(preKey);
     _sessionCipher = SessionCipher.fromStore(_store, receiverAddress);
     return _sessionCipher;
@@ -117,16 +106,29 @@ class ServerConnection implements Communication {
 
   @override
   Future<String> decryptMessage(
-      {required SessionCipher cipher, required Uint8List fromServer}) {
-    // TODO: implement decryptMessage
-    throw UnimplementedError();
+      {required SessionCipher cipher, required Uint8List fromServer}) async {
+    try {
+      final encodedPlainText =
+          await cipher.decrypt(PreKeySignalMessage(fromServer));
+      return utf8.decode(encodedPlainText, allowMalformed: true);
+    } on Exception {
+      try {
+        final encodedPlainText = await cipher
+            .decryptFromSignal(SignalMessage.fromSerialized(fromServer));
+
+        return utf8.decode(encodedPlainText, allowMalformed: true);
+      } on Exception {
+        throw Exception('Out of ideas');
+      }
+    }
   }
 
   @override
   Future<Uint8List> encryptMessage(
-      {required SessionCipher cipher, required String clearText}) {
-    // TODO: implement encryptMessage
-    throw UnimplementedError();
+      {required SessionCipher cipher, required String clearText}) async {
+    final CiphertextMessage encryptedMessage =
+        await cipher.encrypt(Uint8List.fromList(utf8.encode(clearText)));
+    return encryptedMessage.serialize();
   }
 
   PreKeyBundle _keyObjectToPreKeyBundle({required KeyObject keyObject}) {
@@ -172,18 +174,20 @@ class ServerConnection implements Communication {
       preKey: _keyObjectToPreKeyBundle(keyObject: await _keyApi.fetchKey(bob)),
     );
 
-    connectToSocketIoServer();
+    connectToServer();
 
+    await _messageLoop();
+  }
+
+  Future<void> _messageLoop() async {
     String send = '';
     final Encoding encoding = Encoding.getByName('utf-8') ?? Utf8Codec();
-    while (send != 'exit') {
+    while (send != '!exit') {
       send = stdin.readLineSync(encoding: encoding, retainNewlines: false) ??
-          'exit';
-
-      if (send == 'exit') break;
+          '!exit';
 
       final m = {
-        "id": socket.id,
+        "id": _socket.id,
         "timestamp": DateTime.now().millisecondsSinceEpoch,
         'message':
             (await encryptMessage(cipher: _sessionCipher, clearText: send))
@@ -191,30 +195,31 @@ class ServerConnection implements Communication {
                 .toString(),
       };
 
-      socket.emit('send_message', json.encode(m));
+      _socket.emit('send_message', json.encode(m));
     }
   }
 
-  void connectToSocketIoServer() {
+  void connectToServer() {
     try {
-      socket = io('http://127.0.0.1:3001', <String, dynamic>{
+      _socket = io('http://localhost:3002/', <String, dynamic>{
         'transports': ['websocket'],
         'autoConnect': false,
       });
 
-      socket.on('connect', (_) => {print('connect: ${socket.id}')});
-      socket.on('message', _receiveHandler);
-      socket.on('disconnect', (_) => print('disconnect'));
-      socket.on('fromServer', (_) => print(_));
-      socket.connect();
+      _socket.on('connect', (_) => {print('connect: ${_socket.id}')});
+      _socket.on('message', _receiveHandler);
+      _socket.on('disconnect', (_) => print('disconnect'));
+      _socket.on('fromServer', (_) => print(_));
+      _socket.connect();
     } catch (e) {
+      print('Ops, something happened :(');
       print(e.toString());
     }
   }
 
   _receiveHandler(dynamic data) {
     Map<String, dynamic> d = json.decode(data);
-    if (d['id'] != socket.id) {
+    if (d['id'] != _socket.id) {
       final string =
           decryptMessage(cipher: _sessionCipher, fromServer: d['message']);
       print('$d::=> $string');
