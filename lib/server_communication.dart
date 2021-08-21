@@ -10,6 +10,7 @@ import 'communication.dart';
 import 'key_server/key_api.dart';
 import 'key_server/key_object.dart';
 import 'persisted_keys.dart';
+import './helpers/key_object_key_bundle.dart';
 
 class ServerConnection implements Communication {
   late final KeyApi _keyApi;
@@ -41,9 +42,17 @@ class ServerConnection implements Communication {
         myPersistedKeys.generatedKey.privateKey,
         myPersistedKeys.signedPreKeyPair.publicKey.serialize());
 
-    // final signedPreKeySignature = Curve.calculateSignature(
-    //     identityKeyPair.getPrivateKey(),
-    //     myPersistedKeys.signedPreKeyPair.publicKey.serialize());
+    _store = InMemorySignalProtocolStore(
+        identityKeyPair, myPersistedKeys.registrationId);
+
+    // Store keys.
+    await _store.storePreKey(myPersistedKeys.preKeyId,
+        PreKeyRecord(myPersistedKeys.preKeyId, myPersistedKeys.preKeyPair));
+
+    await _store.storeSignedPreKey(
+        myPersistedKeys.signedPreKeyId,
+        SignedPreKeyRecord(myPersistedKeys.signedPreKeyId, _timestamp,
+            myPersistedKeys.signedPreKeyPair, signedPreKeySignature));
 
     // Create public keys bundle
     final preKey = PreKeyBundle(
@@ -57,18 +66,6 @@ class ServerConnection implements Communication {
       identityKeyPair.getPublicKey(),
     );
 
-    _store = InMemorySignalProtocolStore(
-        identityKeyPair, myPersistedKeys.registrationId);
-
-    // Store keys.
-    await _store.storePreKey(myPersistedKeys.preKeyId,
-        PreKeyRecord(myPersistedKeys.preKeyId, myPersistedKeys.preKeyPair));
-
-    await _store.storeSignedPreKey(
-        myPersistedKeys.signedPreKeyId,
-        SignedPreKeyRecord(myPersistedKeys.signedPreKeyId, _timestamp,
-            myPersistedKeys.signedPreKeyPair, signedPreKeySignature));
-
     return Future.value(preKey);
   }
 
@@ -79,29 +76,7 @@ class ServerConnection implements Communication {
     _sessionBuilder = SessionBuilder.fromSignalStore(_store, receiverAddress);
 
     await _sessionBuilder.processPreKeyBundle(preKey);
-    _sessionCipher = SessionCipher.fromStore(_store, receiverAddress);
-    return _sessionCipher;
-  }
-
-  Future<SessionCipher> f(
-      {required SignalProtocolAddress receiverAddress,
-      required PreKeyBundle bobPreKey}) async {
-    //
-
-    final generatedKey = Curve.generateKeyPair();
-
-    final InMemorySignalProtocolStore aliceStore = InMemorySignalProtocolStore(
-      IdentityKeyPair(
-          IdentityKey(generatedKey.publicKey), generatedKey.privateKey),
-      generateRegistrationId(false),
-    );
-
-    final SessionBuilder aliceSessionBuilder =
-        SessionBuilder.fromSignalStore(aliceStore, receiverAddress);
-
-    await aliceSessionBuilder.processPreKeyBundle(bobPreKey);
-
-    return SessionCipher.fromStore(aliceStore, receiverAddress);
+    return SessionCipher.fromStore(_store, receiverAddress);
   }
 
   @override
@@ -131,34 +106,6 @@ class ServerConnection implements Communication {
     return encryptedMessage.serialize();
   }
 
-  PreKeyBundle _keyObjectToPreKeyBundle({required KeyObject keyObject}) {
-    return PreKeyBundle(
-        keyObject.registrationId,
-        keyObject.deviceId,
-        keyObject.preKeyId,
-        Curve.decodePoint(keyObject.preKey, 0),
-        keyObject.signedPreKeyId,
-        Curve.decodePoint(keyObject.signedPreKey, 0),
-        keyObject.signedPreKeySignature,
-        IdentityKey.fromBytes(keyObject.identityKeyPair, 0));
-  }
-
-  KeyObject _keyObjectFromPreKeyBundle(
-      {required String name, required PreKeyBundle preKeyBundle}) {
-    return KeyObject(
-      username: name,
-      identityKeyPair: preKeyBundle.getIdentityKey().publicKey.serialize(),
-      deviceId: preKeyBundle.getDeviceId(),
-      preKeyId: preKeyBundle.getPreKeyId(),
-      preKey: preKeyBundle.getPreKey().serialize(),
-      signedPreKeyId: preKeyBundle.getSignedPreKeyId(),
-      signedPreKey: preKeyBundle.getSignedPreKey()!.serialize(),
-      registrationId: preKeyBundle.getRegistrationId(),
-      timestamp: _timestamp,
-      signedPreKeySignature: preKeyBundle.getSignedPreKeySignature(),
-    );
-  }
-
   @override
   Future<void> start({required String alice, required String bob}) async {
     final bobAddress = SignalProtocolAddress(bob, 1);
@@ -166,12 +113,13 @@ class ServerConnection implements Communication {
     PreKeyBundle alicePreKeyBundle =
         await loadKeysAndSetupStore(receiverAddress: bobAddress);
 
-    await _keyApi.storeKey(_keyObjectFromPreKeyBundle(
-        name: alice, preKeyBundle: alicePreKeyBundle));
+    await _keyApi.storeKey(KeyObjectKeyBundleHelpers.keyObjectFromPreKeyBundle(
+        name: alice, preKeyBundle: alicePreKeyBundle, timestamp: _timestamp));
 
-    await createAliceSessionCipher(
+    _sessionCipher = await createAliceSessionCipher(
       receiverAddress: bobAddress,
-      preKey: _keyObjectToPreKeyBundle(keyObject: await _keyApi.fetchKey(bob)),
+      preKey: KeyObjectKeyBundleHelpers.keyObjectToPreKeyBundle(
+          keyObject: await _keyApi.fetchKey(bob)),
     );
 
     connectToServer();
