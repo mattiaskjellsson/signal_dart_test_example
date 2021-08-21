@@ -5,7 +5,7 @@ import 'package:libsignal_protocol_dart/libsignal_protocol_dart.dart';
 abstract class Communication {
   Future<void> start({required String alice, required String bob});
 
-  Future<void> createAliceStoreAndBuilder(
+  Future<SessionCipher> createAliceSessionCipher(
       {required SignalProtocolAddress receiverAddress,
       required PreKeyBundle preKey});
 

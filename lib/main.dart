@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'communication.dart';
+import 'key_server/key_api.dart';
 import 'names_holder.dart';
 import 'server_communication.dart';
 
 Future<void> main() async {
   try {
-    Communication stuff = ServerConnection();
+    Communication stuff =
+        ServerConnection(keyApi: KeyApi(serverUrl: 'http://localhost:3000/'));
     NamesHolder holder = getNames();
     // NamesHolder holder = NamesHolder(alicesName: 'alice', bobsName: 'bob');
     stuff.start(alice: holder.alicesName, bob: holder.bobsName);

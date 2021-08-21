@@ -216,7 +216,7 @@ void main() {
   const registrationId = 321;
   //
   group('Test reading persisted keys', () {
-    final PersistedKeys keys = KeyPersistance.readKeys('alice');
+    final PersistedKeys keys = KeyPersistance.readKeys(receiverName: 'bob');
 
     test('Test generatedPublicKey', () {
       final actual = keys.generatedKey.publicKey.serialize();

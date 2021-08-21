@@ -6,7 +6,6 @@ import 'package:fixnum/fixnum.dart';
 import 'communication.dart';
 
 class LocalBackAndForth implements Communication {
-  late final InMemorySignalProtocolStore _aliceStore;
   late final SessionCipher _bobSessionCipher;
 
   Future<void> start({required String alice, required String bob}) async {
@@ -18,26 +17,30 @@ class LocalBackAndForth implements Communication {
     final bobPreKey = await createBobStore(aliAddress: aliAddress);
 
     //Start Alice session
-    await createAliceStoreAndBuilder(
+    final aliceSessionCipher = await createAliceSessionCipher(
         receiverAddress: bobAddress, preKey: bobPreKey);
-    final aliceSessionCipher = SessionCipher.fromStore(_aliceStore, bobAddress);
 
     sendMessages(aliceSessionCipher, alice, _bobSessionCipher, bob);
   }
 
-  Future<void> createAliceStoreAndBuilder(
+  Future<SessionCipher> createAliceSessionCipher(
       {required SignalProtocolAddress receiverAddress,
       required PreKeyBundle preKey}) async {
+    //
+
     final generatedKey = Curve.generateKeyPair();
-    _aliceStore = InMemorySignalProtocolStore(
+
+    final InMemorySignalProtocolStore aliceStore = InMemorySignalProtocolStore(
         IdentityKeyPair(
             IdentityKey(generatedKey.publicKey), generatedKey.privateKey),
         generateRegistrationId(false));
 
     final SessionBuilder aliceSessionBuilder =
-        SessionBuilder.fromSignalStore(_aliceStore, receiverAddress);
+        SessionBuilder.fromSignalStore(aliceStore, receiverAddress);
 
     await aliceSessionBuilder.processPreKeyBundle(preKey);
+
+    return SessionCipher.fromStore(aliceStore, receiverAddress);
   }
 
   Future<PreKeyBundle> createBobStore(

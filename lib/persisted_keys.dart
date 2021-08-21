@@ -57,12 +57,12 @@ class PersistedKeys {
 }
 
 class KeyPersistance {
-  static PersistedKeys readKeys(String myName) {
+  static PersistedKeys readKeys({required String receiverName}) {
     Map<String, dynamic> kg;
-    if (myName == 'alice') {
-      kg = json.decode(alicePersistedKeys);
-    } else {
+    if (receiverName == 'alice') {
       kg = json.decode(bobsPersistedKeys);
+    } else {
+      kg = json.decode(alicePersistedKeys);
     }
 
     List<int> generatedPublicKey = kg['generatedPublicKey'].cast<int>();
